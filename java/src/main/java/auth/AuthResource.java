@@ -45,6 +45,4 @@ public class AuthResource {
         }
         return pieces[1];
     }
-
-
 }

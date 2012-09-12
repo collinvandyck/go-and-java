@@ -23,25 +23,20 @@ func Authenticate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), BadRequest)
 		return
 	}
-	
 	user, err := GetUserByApiKey(db, credentials)
 	if err != nil {
 		http.Error(w, err.Error(), Unauthorized)
 		return
 	}
-
-
 	if user == nil {
 		http.Error(w, "No user could be found", NotFound)
 		return
 	}
-
 	bytes, err := json.Marshal(user)
 	if err != nil {
 		http.Error(w, err.Error(), Unauthorized)
 		return
 	}
-
 	w.Write(bytes)
 }
 

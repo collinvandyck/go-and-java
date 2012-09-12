@@ -28,7 +28,5 @@ public interface UserDAO {
                     rs.getBoolean("admin"),
                     rs.getBoolean("active"));
         }
-
     }
-
 }
