@@ -1,6 +1,6 @@
-# Introduction
+# Overview
 
-I've been curious about the different runtime characteristics of the Go and Java languages. I decided to code a simple authentication service in both languages and compare them.
+I've been curious about the different runtime characteristics of the Go and Java languages. I decided to code a simple authentication service in both languages and compare them both from a language/framework as well as a performance perspective.
 
 ## Requirements
 
@@ -16,121 +16,121 @@ The service is a web service that responds to GET requests to /authenticate.  Au
 I built the Java service using [Maven](http://maven.apache.org/) and the excellent [Dropwizard](http://dropwizard.codahale.com/) web services framework.  It provides, out of the box:
 
 * Built-in YAML-based configuration support
-* [Jackson](http://jackson.codehaus.org/) for extremely efficient JSON serialization
+* [Jackson](http://jackson.codehaus.org/) for efficient JSON serialization
 * [JDBI](http://www.jdbi.org/) for database access
 * [Jetty](http://jetty.codehaus.org/jetty/) for a performant HTTP server
 * [Jersey](http://jersey.java.net/) for JAX-RS RESTful serices
-* [Guava](http://code.google.com/p/guava-libraries/) for making your Java life more enjoyable as well as some codecs we will use
+* [Guava](http://code.google.com/p/guava-libraries/) for making your Java life more enjoyable
 
 There are many other things it provides, like [Metrics](http://dropwizard.codahale.com/getting-started/#metrics-for-metrics), which are not part of this discussion, but definitely a MUST for web services in general.
 
 ## Go Stack
 
-I've limited the Go implementation to using the standard library, as it provides:
+The Go service was built using the standard library, which provides:
 
 * [Http Server](http://golang.org/pkg/net/http/) functionality
 * [SQL](http://golang.org/pkg/database/sql/) access
 * [JSON](http://golang.org/pkg/encoding/json/) codec
 * [Base64](http://golang.org/pkg/encoding/base64/) codec
 
-## Disclaimer
+***
 
-I've spent most of my professional life coding against the JVM.  I've only been coding Go for the past month or two. As such, if you have been doing any Go programming for a while, you'll probably see that I've done something stupid, which is probably true.  And you may also see that I'm doing something supid in Java, which is also probably true.  I'd really appreciate any constructive criticism of my code.
+# Code Comparison
+
+We'll break down how this service looks in both languages in these categories:
+
+1. Service configuration
+2. HTTP routing and dispatch
+3. Database access
+4. JSON Serialization
+
+## Configuration
+
+### Dropwizard Service Configuration
+
+Dropwizard provides out of the box configuration support in the form of configuration classes which are unmarshalled from a YAML config file.
+
+<script src="https://gist.github.com/3708969.js?file=gistfile1.yml"></script>
+<script src="https://gist.github.com/3708961.js?file=gistfile1.java"></script> 
+
+When the service comes up, Dropwizard provides the service with a validated configuration instance. You specify what configuration file to use on the command line.  In this case we specified a database configuration element which is explicitly declared in our AuthConfiguration.  We also specified some HTTP configuration which comes from the Configuration class that AuthConfiguration extends.
+
+### Go Service Configuration
+
+Go does not have built-in support for YAML, so we will use JSON instead.
+
+<script src="https://gist.github.com/3709007.js?file=gistfile1.json"></script>
+<script src="https://gist.github.com/3709014.js?file=gistfile1.go"></script>
+
+To read in the configuration, ReadConfig() simply reads the contents of the configuration file, also specified on the command line, into a Config struct that mirrors the structure of the JSON using the built-in encoding/json package.
+
+## HTTP Routing
+
+### Dropwizard HTTP Routing
+
+Dropwizard uses [Jersey](http://jersey.java.net/) which is an implementation of JAX-RS.  To create a RESTful endpoint, you create a resource class that has JAX-RS annotations which tells Jersey how to route incoming HTTP requests.
+
+<script src="https://gist.github.com/3709088.js?file=gistfile1.java"></script>
+
+We also need to add this resource in our Dropwizard service callback:
+
+```environment.addResource(new AuthResource(userDAO));```
+
+
+### Go HTTP Routing
+
+Using the built-in net/http package, we can route incoming URIs to functions.  Go has first-class function support, so we can use function identifers when mapping URIs.
+
+<script src="https://gist.github.com/3709123.js?file=gistfile1.go"></script>
+
+Authenticate is an exported function that lives in auth_resource.go:
+
+<script src="https://gist.github.com/3709135.js?file=gistfile1.go"></script>
+
+## Database Access
+
+### Dropwizard Database Access
+
+The dropwizard-db module includes the JDBI library which we've used to access our users table.  We create a DAO, which is an interface whose methods map to DB queries (defined by method level annotations). In order to create User class instances we also provide a mapper which JDBI will call on each result set row returned.
+
+<script src="https://gist.github.com/3709166.js?file=gistfile1.java"></script>
+
+### Go Database Access
+
+Using the built-in database/sql package, we can make a query on a database handle, and then scan values from a result row into a pre-allocated struct.
+
+<script src="https://gist.github.com/3709176.js?file=gistfile1.go"></script>
+
+One thing that you'll notice is that we build a User struct, which has string fields for Id, Email, and Name.  For non-string fields we can scan values from the row directly into the struct.  However, we use []byte slices to scan in the string rows.  This is because in Go, strings cannot be nil.  The empty representation of a string is the empty string (""). Scanning in a NULL column into a Go string will cause an error for this reason.
+
+To get around this, we scan into a []byte slice, which can be nil, and then do a string([]byte) conversion to create the string value.  The way I've structured this particular struct, you cannot differentiate between null and "" string values coming from the database. There are ways around this, but I chose the simplest solution for this comparison.
+
+## JSON Serialization
+
+### Dropwizard JSON Serialization
+
+Dropwizard provides convenient hooks into the web framework that allow you to simply return a User from your resource method at which point the User is JSON serialized and sent back to the client.  The serialization is driven by annotations on your value class, which allow you to do things like omitting null values, changing property names, excluding properties, etc.
+
+<script src="https://gist.github.com/3709237.js?file=gistfile1.java"></script>
+
+Note that by default, Date fields are serialized as timestamp long values.  In order to represent dates as ISO-8601 formatted values, we create two more methods, annotate them as JSON properties, and return the dates in the ISO-8601 format.
+
+### Go JSON Serialization
+
+The encoding/json library makes it easy to serialize structs. 
+
+<script src="https://gist.github.com/3709261.js?file=gistfile1.go"></script>
+
+Structs may be annotated with metadata that helps configure the serialization:
+
+<script src="https://gist.github.com/3709266.js?file=gistfile1.go"></script>
+
+Note that by default, Go serializes time.Time values as ISO-8601 formatted strings, so there is no extra work that needs to be done.
+
 
 ***
 
-# Performance
-
-In order to test the performance, I used the [http_perf](https://github.com/collinvandyck/http_perf) library I wrote in Go to measure response times.  I decided a couple of different scenarios were relevant:
-
-* 1000 requests, concurrency = 1
-* 100,000 requests, concurrency = 1
-* 1000 requests, concurrency = 4
-* 100,000 requests, concurrency = 4
-
-In these tests, I'm measuring:
-
-* min response time
-* max response time
-* average response time
-* standard deviation
-
-The hardware I'm running this on is a 2012 Macbook Pro, OS X 10.8.1, 2.6GHz i7, 16GB RAM.
-
-To perform each request, the code I run is:
-
-    http_perf -h "Authorization: Basic [base 64 encoded api key]=" -url "http://localhost:8080/authenticate" -iterations [iterations] -concurrency [concurrency]
-
-Each app server is restarted before each start.    
-    
-### Test 1: 1,000 requests, concurrency = 1
-
-#### Java
-* min: 1.20ms
-* max: 126.86ms
-* avg: 1.92ms
-* std dev: 3.97ms
-
-#### Go
-* min: 0.51ms
-* max: 8.74ms
-* avg: 0.64ms
-* std dev: 0.28ms
-
-### Test 2: 1,000,000 requests, concurrency = 1
-
-#### Java
-
-* min: 0.42ms
-* max: 129.06ms
-* avg: 0.50ms
-* std dev: 0.52ms
-
-#### Go
-
-* min: 0.49ms
-* max: 41.11ms
-* avg: 0.62ms
-* std dev: 0.33ms
-
-
-### Test 3: 1,000 requests, concurrency = 4
-
-#### Java
-
-* min: 1.41ms
-* max: 138.64ms
-* avg: 3.02ms
-* std dev: 8.60ms
-
-#### Go
-
-* min: 0.75ms
-* max: 12.40ms
-* avg: 1.75ms
-* std dev: 1.76ms
-
-### Test 4: 1,000,000 requests, concurrency = 4
-
-#### Java
-
-* min: 0.46ms
-* max: 177.25ms
-* avg: 0.68ms
-* std dev: 1.07ms
-
-#### Go
-
-* min: 0.60ms
-* max: 50.80ms
-* avg: 1.68ms
-* std dev: 1.73ms
-
-***
-
-# Conclusion
-
-The Java and Go solutions perform similarly, if not for some spikes that occur on the Java side. However, the means tend to be somewhat inline.  I hope that this might give those debating whether or not to use Java or Go for a similar type of service the motivation to consider things like code clarity, brevity, and general maintainability of a solution over performance considerations.
+# Performance - TBD
 
 
 
